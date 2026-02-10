@@ -2,11 +2,10 @@
 #include "nob.h"
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <time.h>
 
 #define CARD_HEIGHT 150
 #define CARD_WIDTH 107
-
 #define SPACING 20.0
 
 enum Suit { 
@@ -119,10 +118,12 @@ void GameBoardInit() {
     int limit = 1;
     for (int i = 0; i < 7; i++) {
         for (int j = 0; j < limit; j++) {
+            srand(time(NULL));
             int index = (rand() % shuffle.count);
+            printf("%d\n", index);
             int choice = shuffle.items[index];
             da_append(&play[i], choice);
-            nob_da_remove_unordered(&shuffle, index);
+            da_remove_unordered(&shuffle, index);
 
             if (j + 1 == limit) {
                 cards[index].visible = true;
@@ -134,9 +135,10 @@ void GameBoardInit() {
     printf("Did we get here?\n");
 
     for (int i = shuffle.count - 1; i >= 0; i--) {
+        srand(time(NULL));
         int index = (rand() % shuffle.count);
         da_append(&draw, index);
-        nob_da_remove_unordered(&shuffle, index);
+        da_remove_unordered(&shuffle, index);
     }
 
     printf("Draw Pile:\n");
@@ -172,11 +174,6 @@ int main(void) {
 
     while(!WindowShouldClose()) {
         frameCount++;
-
-        if (MouseButtonIsPressed(KEY_0)) {
-
-
-        }
 
         // Rectangle rect = { card.pos.x, card.pos.y, CARD_WIDTH, CARD_HEIGHT };
         // Vector2 mousePos = GetMousePosition();
