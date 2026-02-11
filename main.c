@@ -93,6 +93,8 @@ Pile completed[4] = {0};
 Pile play[7] = {0};
 int grabbedCard = -1;
 
+Vector2 drawPos = { SPACING, SPACING };
+
 void LoadCards() {
     for (int i = 0; i < 52; i++) {
         Image img = LoadImage(cards[i].imagePath);
@@ -120,19 +122,17 @@ void GameBoardInit() {
         for (int j = 0; j < limit; j++) {
             srand(time(NULL));
             int index = (rand() % shuffle.count);
-            printf("%d\n", index);
             int choice = shuffle.items[index];
             da_append(&play[i], choice);
             da_remove_unordered(&shuffle, index);
 
             if (j + 1 == limit) {
-                cards[index].visible = true;
+                cards[choice].visible = true;
+                // printf("visible: i %d j %d index %d\n", i, j, choice);
             }
         }
         limit++;
     }
-
-    printf("Did we get here?\n");
 
     for (int i = shuffle.count - 1; i >= 0; i--) {
         srand(time(NULL));
@@ -141,21 +141,25 @@ void GameBoardInit() {
         da_remove_unordered(&shuffle, index);
     }
 
-    printf("Draw Pile:\n");
-    da_foreach(int, x, &draw) {
-        printf("%d\n", *x);
-    }
+    // printf("Draw Pile:\n");
+    // da_foreach(int, x, &draw) {
+    //     printf("%d\n", *x);
+    // }
 
     for (int i = 0; i < 7; i++) {
         Pile p = play[i];
-        printf("p.count = %d\n", p.count);
+        // printf("p.count = %d\n", p.count);
         for (int j = 0; j < p.count; j++) {
-            printf("play %d, card %d\n", i, p.items[j]);
+            // printf("play %d, card %d\n", i, p.items[j]);
         }
-        printf("\n");
+        // printf("\n");
     }
+}
 
-    printf("Did we get here?\n");
+void printCard(Card card, int frameCount) {
+    if (frameCount % 120 == 0) {
+        printf("card: id: %d, suit: %d, number: %d, pos: %f, %f\n", card.id, card.suit, card.number, card.pos.x, card.pos.y);
+    }
 }
 
 int main(void) {
@@ -174,33 +178,64 @@ int main(void) {
 
     while(!WindowShouldClose()) {
         frameCount++;
+        Vector2 mousePos = GetMousePosition();
 
-        // Rectangle rect = { card.pos.x, card.pos.y, CARD_WIDTH, CARD_HEIGHT };
-        // Vector2 mousePos = GetMousePosition();
-        //
-        // if (!mouseDown && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, rect)) {
-        //     mouseDown = true;
-        //     offset.x = mousePos.x - card.pos.x;
-        //     offset.y = mousePos.y - card.pos.y;
-        // }
-        //
-        // if (mouseDown) {
-        //     card.pos.x = mousePos.x - offset.x;
-        //     card.pos.y = mousePos.y - offset.y;
-        // }
-        //
-        // if (mouseDown && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) 
-        // {
-        //     mouseDown = false;
-        // }
-        //
+        for (int i = 0; i < 52; i++) {
+            Card *card = &cards[i];
+
+            if (!card->visible) continue;
+
+            Rectangle rect = { card->pos.x, card->pos.y, CARD_WIDTH, CARD_HEIGHT };
+
+            if (frameCount % 120 == 0) {
+                // printCard(*card, frameCount);
+                // printf("mouse position: %f, %f\n", card->id, mousePos.x, mousePos.y, card->pos.x, card->pos.y);
+                // printf("in the box? %d", CheckCollisionPointRec(mousePos, rect));
+            }
+
+            if (!mouseDown && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, rect)) {
+                mouseDown = true;
+                grabbedCard = card->id;
+                offset.x = mousePos.x - card->pos.x;
+                offset.y = mousePos.y - card->pos.y;
+            }
+
+            if (mouseDown) {
+                card->pos.x = mousePos.x - offset.x;
+                card->pos.y = mousePos.y - offset.y;
+            }
+
+            if (mouseDown && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) 
+            {
+                grabbedCard = -1;
+                mouseDown = false;
+            }
+        }
+
+        Rectangle drawRect = { drawPos.x, drawPos.y, CARD_WIDTH, CARD_HEIGHT };
+        if (draw.count > 0 && CheckCollisionPointRec(mousePos, drawRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            int id = draw.items[0];
+            da_remove_unordered(&draw, 0);
+            Card *card = &cards[id];
+            printCard(*card, 0);
+            da_append(&show, id);
+
+            // We need to set the show position here so that we can grab the card.
+            // we also need to set the visibility and figure out some other stuff with the snow pile...
+
+        }
+
         BeginDrawing();
 
         ClearBackground(GREEN);
-        Vector2 thing = { SPACING, SPACING };
 
         if (draw.count > 0) {
-            DrawTextureV(cardBack, thing, RAYWHITE);
+            DrawTextureV(cardBack, drawPos, RAYWHITE);
+        }
+
+        if (show.count > 0) {
+            Card card
+            DrawTextureV(cardBack, drawPos, RAYWHITE);
         }
 
         int x = SPACING * 2 + CARD_WIDTH;
@@ -212,18 +247,30 @@ int main(void) {
             Vector2 pos = { playStart.x * (i + 1), playStart.y };
 
             da_foreach(int, cardIndex, &play[i]) {
-                Card card = cards[*cardIndex];
-                card.pos = pos;
-                if (card.visible) {
-                    DrawTextureV(card.texture, card.pos, RAYWHITE);
+                Card *card = &cards[*cardIndex];
+                if (grabbedCard == card->id) continue;
+
+                card->pos.x = pos.x;
+                card->pos.y = pos.y;
+                if (frameCount % 120 == 0) {
+                    // printf("card: %f, %f\n", card->pos.x, card->pos.y);
+                }
+
+                if (card->visible) {
+                    DrawTextureV(card->texture, card->pos, RAYWHITE);
                 } else {
-                    DrawTextureV(cardBack, card.pos, RAYWHITE);
+                    DrawTextureV(cardBack, card->pos, RAYWHITE);
                 }
 
                 pos.y += SPACING;
             }
 
             pos.x += SPACING + CARD_WIDTH;
+        }
+
+        if (grabbedCard != -1) {
+            Card card = cards[grabbedCard];
+            DrawTextureV(card.texture, card.pos, RAYWHITE);
         }
 
         EndDrawing();
