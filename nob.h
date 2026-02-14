@@ -388,6 +388,16 @@ NOBDEF void nob_dir_entry_close(Nob_Dir_Entry dir);
         (da)->items[j] = (da)->items[--(da)->count]; \
     } while(0)
 
+#define nob_da_remove_ordered(da, i)             \
+    do {                                         \
+        size_t j = (i);                          \
+        NOB_ASSERT(j < (da)->count);             \
+        for (; j < (da)->count - 1; j++) {       \
+            (da)->items[j] = (da)->items[j + 1]; \
+        }                                        \
+        --(da)->count;                           \
+    } while(0)
+
 // Foreach over Dynamic Arrays. Example:
 // ```c
 // typedef struct {
@@ -2813,6 +2823,7 @@ NOBDEF char *nob_temp_running_executable_path(void)
         #define da_reserve nob_da_reserve
         #define da_last nob_da_last
         #define da_remove_unordered nob_da_remove_unordered
+        #define da_remove_ordered nob_da_remove_ordered
         #define da_foreach nob_da_foreach
         #define fa_append nob_fa_append
         #define swap nob_swap

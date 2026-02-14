@@ -87,13 +87,14 @@ Card cards[52] = {
     { 51, CLUB, 13, {0}, "./SVG-cards/png/2x/club_king.png", {0} },
 };
 
-Pile draw = {0};
-Pile show = {0};
-Pile completed[4] = {0};
+Pile stock = {0};
+Pile waste = {0};
+Pile foundation[4] = {0};
 Pile play[7] = {0};
 int grabbedCard = -1;
 
-Vector2 drawPos = { SPACING, SPACING };
+Vector2 stockPos = { SPACING, SPACING };
+Vector2 wastePos = { CARD_WIDTH + SPACING * 2, SPACING };
 
 void LoadCards() {
     for (int i = 0; i < 52; i++) {
@@ -114,7 +115,7 @@ void GameBoardInit() {
     da_reserve(&shuffle, 52);
 
     for (int i = 0; i < 52; i++) {
-        da_append(&shuffle, cards[i].id);
+        da_append(&shuffle, i);
     }
 
     int limit = 1;
@@ -134,15 +135,16 @@ void GameBoardInit() {
         limit++;
     }
 
-    for (int i = shuffle.count - 1; i >= 0; i--) {
+    while (shuffle.count > 0) {
         srand(time(NULL));
         int index = (rand() % shuffle.count);
-        da_append(&draw, index);
+        int id = shuffle.items[index];
+        da_append(&stock, id);
         da_remove_unordered(&shuffle, index);
     }
 
     // printf("Draw Pile:\n");
-    // da_foreach(int, x, &draw) {
+    // da_foreach(int, x, &stock) {
     //     printf("%d\n", *x);
     // }
 
@@ -212,30 +214,43 @@ int main(void) {
             }
         }
 
-        Rectangle drawRect = { drawPos.x, drawPos.y, CARD_WIDTH, CARD_HEIGHT };
-        if (draw.count > 0 && CheckCollisionPointRec(mousePos, drawRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            int id = draw.items[0];
-            da_remove_unordered(&draw, 0);
+        Rectangle drawRect = { stockPos.x, stockPos.y, CARD_WIDTH, CARD_HEIGHT };
+        if (CheckCollisionPointRec(mousePos, drawRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+
+            if (stock.count == 0) {
+                // I am not good. But I think that you could do a pointer swap on these 
+                // and then you would not have to move items one at a time.
+                // you would just swap the pointers for the two piles.
+                while (waste.count > 0) {
+                    int id = waste.items[0];
+                    da_remove_ordered(&waste, 0);
+                    da_append(&stock, id);
+                }
+            }
+
+            int id = stock.items[0];
+            da_remove_ordered(&stock, 0);
             Card *card = &cards[id];
+            card->pos.x = wastePos.x;
+            card->pos.y = wastePos.y;
             printCard(*card, 0);
-            da_append(&show, id);
-
-            // We need to set the show position here so that we can grab the card.
-            // we also need to set the visibility and figure out some other stuff with the snow pile...
-
+            da_append(&waste, id);
         }
 
         BeginDrawing();
 
         ClearBackground(GREEN);
 
-        if (draw.count > 0) {
-            DrawTextureV(cardBack, drawPos, RAYWHITE);
+        if (stock.count > 0) {
+            DrawTextureV(cardBack, stockPos, RAYWHITE);
         }
 
-        if (show.count > 0) {
-            Card card
-            DrawTextureV(cardBack, drawPos, RAYWHITE);
+        if (waste.count > 0) {
+            Card card = &cards[da_last(&waste)];
+
+            if (card.id != grabbedCard) {
+                DrawTextureV(card.texture, wastePos, RAYWHITE);
+            }
         }
 
         int x = SPACING * 2 + CARD_WIDTH;
@@ -266,6 +281,22 @@ int main(void) {
             }
 
             pos.x += SPACING + CARD_WIDTH;
+        }
+
+        Vector2 pos = { (SPACING * 2 + CARD_WIDTH) * 4, SPACING };
+        float thickness = 5.0;
+
+
+        for (int i = 0; i < 4; i++) {
+            Rectangle rec = { pos.x - thickness, pos.y - thickness, CARD_WIDTH + thickness * 2, CARD_HEIGHT + thickness * 2 };
+
+            if (foundation[i].count == 0) {
+                DrawRectangleLinesEx(rec, 5.0, BLACK);
+            }
+
+            // DrawTextureV(card.texture, card.pos, RAYWHITE);
+
+            pos.x += SPACING * 2 +  CARD_WIDTH;
         }
 
         if (grabbedCard != -1) {
