@@ -4,6 +4,12 @@
 #include <stdlib.h>
 #include <time.h>
 
+// TODOS:
+// 1. move all the layout logic and positioning to somewhere upfont for setting the card positions
+// 2. make some common code for setting card positions
+// 3. Should we just make the piles cards instead of indexes. Then we can 
+//  just move the pointers around instead of this id nonsense.
+
 #define CARD_HEIGHT 150
 #define CARD_WIDTH 107
 #define SPACING 20.0
@@ -177,6 +183,7 @@ int main(void) {
 
     bool mouseDown = false;
     Vector2 offset = {0};
+    Vector2 origPos = {0};
 
     while(!WindowShouldClose()) {
         frameCount++;
@@ -190,14 +197,16 @@ int main(void) {
             Rectangle rect = { card->pos.x, card->pos.y, CARD_WIDTH, CARD_HEIGHT };
 
             if (frameCount % 120 == 0) {
-                // printCard(*card, frameCount);
-                // printf("mouse position: %f, %f\n", card->id, mousePos.x, mousePos.y, card->pos.x, card->pos.y);
-                // printf("in the box? %d", CheckCollisionPointRec(mousePos, rect));
+                printCard(*card, frameCount);
+                printf("mouse position: %f, %f\n", card->id, mousePos.x, mousePos.y, card->pos.x, card->pos.y);
+                printf("in the box? %d\n", CheckCollisionPointRec(mousePos, rect));
             }
 
             if (!mouseDown && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, rect)) {
                 mouseDown = true;
                 grabbedCard = card->id;
+                origPos.x = card->pos.x;
+                origPos.y = card->pos.y;
                 offset.x = mousePos.x - card->pos.x;
                 offset.y = mousePos.y - card->pos.y;
             }
@@ -209,6 +218,9 @@ int main(void) {
 
             if (mouseDown && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) 
             {
+                Card *c = &cards[grabbedCard];
+                c->pos.x = origPos.x;
+                c->pos.y = origPos.y;
                 grabbedCard = -1;
                 mouseDown = false;
             }
@@ -218,11 +230,12 @@ int main(void) {
         if (CheckCollisionPointRec(mousePos, drawRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
 
             if (stock.count == 0) {
-                // I am not good. But I think that you could do a pointer swap on these 
-                // and then you would not have to move items one at a time.
-                // you would just swap the pointers for the two piles.
                 while (waste.count > 0) {
                     int id = waste.items[0];
+                    Card *card = &cards[id];
+                    card->pos.x = stockPos.x;
+                    card->pos.y = stockPos.y;
+                    card->visible = false;
                     da_remove_ordered(&waste, 0);
                     da_append(&stock, id);
                 }
@@ -233,6 +246,7 @@ int main(void) {
             Card *card = &cards[id];
             card->pos.x = wastePos.x;
             card->pos.y = wastePos.y;
+            card->visible = true;
             printCard(*card, 0);
             da_append(&waste, id);
         }
@@ -246,7 +260,7 @@ int main(void) {
         }
 
         if (waste.count > 0) {
-            Card card = &cards[da_last(&waste)];
+            Card card = cards[da_last(&waste)];
 
             if (card.id != grabbedCard) {
                 DrawTextureV(card.texture, wastePos, RAYWHITE);
@@ -265,6 +279,8 @@ int main(void) {
                 Card *card = &cards[*cardIndex];
                 if (grabbedCard == card->id) continue;
 
+                // TODO: all the positioning logic should happen elsewhere.
+                // I think that doing this here is a bad idea.
                 card->pos.x = pos.x;
                 card->pos.y = pos.y;
                 if (frameCount % 120 == 0) {
