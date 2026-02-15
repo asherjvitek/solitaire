@@ -32,7 +32,7 @@ typedef struct {
 } Card;
 
 typedef struct {
-    int *items;
+    Card **items;
     int count;
     int capacity;
 } Pile;
@@ -97,7 +97,7 @@ Pile stock = {0};
 Pile waste = {0};
 Pile foundation[4] = {0};
 Pile play[7] = {0};
-int grabbedCard = -1;
+Card *grabbedCard = NULL;
 
 Vector2 stockPos = { SPACING, SPACING };
 Vector2 wastePos = { CARD_WIDTH + SPACING * 2, SPACING };
@@ -121,7 +121,7 @@ void GameBoardInit() {
     da_reserve(&shuffle, 52);
 
     for (int i = 0; i < 52; i++) {
-        da_append(&shuffle, i);
+        da_append(&shuffle, &cards[i]);
     }
 
     int limit = 1;
@@ -129,12 +129,12 @@ void GameBoardInit() {
         for (int j = 0; j < limit; j++) {
             srand(time(NULL));
             int index = (rand() % shuffle.count);
-            int choice = shuffle.items[index];
+            Card *choice = shuffle.items[index];
             da_append(&play[i], choice);
             da_remove_unordered(&shuffle, index);
 
             if (j + 1 == limit) {
-                cards[choice].visible = true;
+                choice->visible = true;
                 // printf("visible: i %d j %d index %d\n", i, j, choice);
             }
         }
@@ -144,8 +144,8 @@ void GameBoardInit() {
     while (shuffle.count > 0) {
         srand(time(NULL));
         int index = (rand() % shuffle.count);
-        int id = shuffle.items[index];
-        da_append(&stock, id);
+        Card *card = shuffle.items[index];
+        da_append(&stock, card);
         da_remove_unordered(&shuffle, index);
     }
 
@@ -166,7 +166,7 @@ void GameBoardInit() {
 
 void printCard(Card card, int frameCount) {
     if (frameCount % 120 == 0) {
-        printf("card: id: %d, suit: %d, number: %d, pos: %f, %f\n", card.id, card.suit, card.number, card.pos.x, card.pos.y);
+        printf("suit: %d, number: %d, pos: %f, %f\n", card.suit, card.number, card.pos.x, card.pos.y);
     }
 }
 
@@ -180,7 +180,6 @@ int main(void) {
     GameBoardInit();
 
     int frameCount = 0;
-
     bool mouseDown = false;
     Vector2 offset = {0};
     Vector2 origPos = {0};
@@ -197,33 +196,42 @@ int main(void) {
             Rectangle rect = { card->pos.x, card->pos.y, CARD_WIDTH, CARD_HEIGHT };
 
             if (frameCount % 120 == 0) {
-                printCard(*card, frameCount);
-                printf("mouse position: %f, %f\n", card->id, mousePos.x, mousePos.y, card->pos.x, card->pos.y);
-                printf("in the box? %d\n", CheckCollisionPointRec(mousePos, rect));
+                // printCard(*card, frameCount);
+                // printf("mouse position: %f, %f\n", mousePos.x, mousePos.y, card->pos.x, card->pos.y);
+                // printf("in the box? %d\n", CheckCollisionPointRec(mousePos, rect));
             }
 
             if (!mouseDown && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, rect)) {
                 mouseDown = true;
-                grabbedCard = card->id;
+                grabbedCard = card;
+
                 origPos.x = card->pos.x;
                 origPos.y = card->pos.y;
+
                 offset.x = mousePos.x - card->pos.x;
                 offset.y = mousePos.y - card->pos.y;
+                break;
             }
 
-            if (mouseDown) {
-                card->pos.x = mousePos.x - offset.x;
-                card->pos.y = mousePos.y - offset.y;
-            }
 
-            if (mouseDown && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) 
-            {
-                Card *c = &cards[grabbedCard];
-                c->pos.x = origPos.x;
-                c->pos.y = origPos.y;
-                grabbedCard = -1;
-                mouseDown = false;
-            }
+        }
+
+        if (mouseDown) {
+            grabbedCard->pos.x = mousePos.x - offset.x;
+            grabbedCard->pos.y = mousePos.y - offset.y;
+        }
+
+        if (mouseDown && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+            printCard(*grabbedCard, 0);
+            grabbedCard->pos.x = origPos.x;
+            grabbedCard->pos.y = origPos.y;
+
+            printCard(*grabbedCard, 0);
+            origPos.x = 0;
+            origPos.y = 0;
+
+            grabbedCard = NULL;
+            mouseDown = false;
         }
 
         Rectangle drawRect = { stockPos.x, stockPos.y, CARD_WIDTH, CARD_HEIGHT };
@@ -231,24 +239,22 @@ int main(void) {
 
             if (stock.count == 0) {
                 while (waste.count > 0) {
-                    int id = waste.items[0];
-                    Card *card = &cards[id];
+                    Card *card = waste.items[0];                    
                     card->pos.x = stockPos.x;
                     card->pos.y = stockPos.y;
                     card->visible = false;
                     da_remove_ordered(&waste, 0);
-                    da_append(&stock, id);
+                    da_append(&stock, card);
                 }
             }
 
-            int id = stock.items[0];
             da_remove_ordered(&stock, 0);
-            Card *card = &cards[id];
+            Card *card = stock.items[0];
             card->pos.x = wastePos.x;
             card->pos.y = wastePos.y;
             card->visible = true;
             printCard(*card, 0);
-            da_append(&waste, id);
+            da_append(&waste, card);
         }
 
         BeginDrawing();
@@ -260,10 +266,11 @@ int main(void) {
         }
 
         if (waste.count > 0) {
-            Card card = cards[da_last(&waste)];
+            Card *card = da_last(&waste);
 
-            if (card.id != grabbedCard) {
-                DrawTextureV(card.texture, wastePos, RAYWHITE);
+            printCard(*card, frameCount);
+            if (card != grabbedCard) {
+                DrawTextureV(card->texture, card->pos, RAYWHITE);
             }
         }
 
@@ -275,17 +282,14 @@ int main(void) {
         for (int i = 0; i < 7; i++) {
             Vector2 pos = { playStart.x * (i + 1), playStart.y };
 
-            da_foreach(int, cardIndex, &play[i]) {
-                Card *card = &cards[*cardIndex];
-                if (grabbedCard == card->id) continue;
+            da_foreach(Card*, c, &play[i]) {
+                Card *card = *c;
+                if (grabbedCard == card) continue;
 
                 // TODO: all the positioning logic should happen elsewhere.
                 // I think that doing this here is a bad idea.
                 card->pos.x = pos.x;
                 card->pos.y = pos.y;
-                if (frameCount % 120 == 0) {
-                    // printf("card: %f, %f\n", card->pos.x, card->pos.y);
-                }
 
                 if (card->visible) {
                     DrawTextureV(card->texture, card->pos, RAYWHITE);
@@ -302,7 +306,6 @@ int main(void) {
         Vector2 pos = { (SPACING * 2 + CARD_WIDTH) * 4, SPACING };
         float thickness = 5.0;
 
-
         for (int i = 0; i < 4; i++) {
             Rectangle rec = { pos.x - thickness, pos.y - thickness, CARD_WIDTH + thickness * 2, CARD_HEIGHT + thickness * 2 };
 
@@ -315,9 +318,8 @@ int main(void) {
             pos.x += SPACING * 2 +  CARD_WIDTH;
         }
 
-        if (grabbedCard != -1) {
-            Card card = cards[grabbedCard];
-            DrawTextureV(card.texture, card.pos, RAYWHITE);
+        if (grabbedCard != NULL) {
+            DrawTextureV(grabbedCard->texture, grabbedCard->pos, RAYWHITE);
         }
 
         EndDrawing();
