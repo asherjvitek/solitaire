@@ -4,16 +4,13 @@
 #include <stdlib.h>
 #include <time.h>
 
-// TODOS:
-// 1. move all the layout logic and positioning to somewhere upfont for setting the card positions
-// 2. make some common code for setting card positions
-// 3. We should have something for figuring out the card position that is not relative to another card
-//  right now it is not possible to play cards on open spaces
-
 #define DEBUG true
 #define CARD_HEIGHT 150
 #define CARD_WIDTH 107
 #define SPACING 20.0
+#define CARD_WIDTH_SPACING (CARD_WIDTH + SPACING + SPACING)
+#define CARD_HEIGHT_SPACING (CARD_HEIGHT + SPACING + SPACING)
+#define OUTLINE_THICKNESS 0.5
 
 enum Suit { 
     SPADE,
@@ -27,7 +24,6 @@ typedef struct {
     enum Suit suit;
     int number;
     Vector2 pos;
-    Vector2 origPos;
     Vector2 offset;
     char *imagePath;
     Texture2D texture;
@@ -40,7 +36,7 @@ typedef struct {
     int capacity;
 } Pile;
 
-#define new_card(id, suit, number, image) { id, suit, number, {0}, {0}, {0}, "./SVG-cards/png/2x/" image, {0} }
+#define new_card(id, suit, number, image) { id, suit, number, {0}, {0}, "./SVG-cards/png/2x/" image, {0} }
 
 bool containsCard(Pile *pile, Card *card) {
     da_foreach(Card*, c, pile) {
@@ -116,23 +112,40 @@ bool mouseDown = false;
 Vector2 stockPos = { SPACING, SPACING };
 Vector2 wastePos = { CARD_WIDTH + SPACING * 2, SPACING };
 Vector2 playPos[7] = { 
-    { CARD_WIDTH + SPACING * 2, CARD_HEIGHT + SPACING },
-    { (CARD_WIDTH + SPACING * 2) * 2, CARD_HEIGHT + SPACING },
-    { (CARD_WIDTH + SPACING * 2) * 3, CARD_HEIGHT + SPACING },
-    { (CARD_WIDTH + SPACING * 2) * 4, CARD_HEIGHT + SPACING },
-    { (CARD_WIDTH + SPACING * 2) * 5, CARD_HEIGHT + SPACING },
-    { (CARD_WIDTH + SPACING * 2) * 6, CARD_HEIGHT + SPACING },
+    { CARD_WIDTH_SPACING * 1, CARD_HEIGHT_SPACING },
+    { CARD_WIDTH_SPACING * 2, CARD_HEIGHT_SPACING },
+    { CARD_WIDTH_SPACING * 3, CARD_HEIGHT_SPACING },
+    { CARD_WIDTH_SPACING * 4, CARD_HEIGHT_SPACING },
+    { CARD_WIDTH_SPACING * 5, CARD_HEIGHT_SPACING },
+    { CARD_WIDTH_SPACING * 6, CARD_HEIGHT_SPACING },
 };
 
 Vector2 foundationPos[4] = { 
-    { CARD_WIDTH + SPACING * 2, SPACING },
-    { (CARD_WIDTH + SPACING * 2) * 2, SPACING },
-    { (CARD_WIDTH + SPACING * 2) * 3, SPACING },
-    { (CARD_WIDTH + SPACING * 2) * 4, SPACING },
+    { CARD_WIDTH_SPACING * 4, SPACING },
+    { CARD_WIDTH_SPACING * 5, SPACING },
+    { CARD_WIDTH_SPACING * 6, SPACING },
+    { CARD_WIDTH_SPACING * 7, SPACING },
 };
 
 
-void LoadCards() {
+void printCard(Card *card, char* message, int frameCount) {
+    if (!DEBUG) return;
+
+    if (frameCount % 120 == 0) {
+        printf("%s suit: %d, number: %d, pos: %f, %f, pointer: %p\n", message, card->suit, card->number, card->pos.x, card->pos.y, card);
+    }
+}
+
+void printCards() {
+    printf("----------------- Cards -----------------\n");
+    for (int i = 0; i < 52; i++) {
+        Card *card = &cards[i];
+        printCard(card, "", 0);
+    }
+    printf("----------------- Cards -----------------\n");
+}
+
+void loadCards() {
     for (int i = 0; i < 52; i++) {
         Image img = LoadImage(cards[i].imagePath);
         ImageResize(&img, CARD_WIDTH, CARD_HEIGHT);
@@ -146,42 +159,112 @@ void LoadCards() {
     UnloadImage(img);
 } 
 
-void GameBoardInit() {
+// this is not the most optimal way to do this
+// but it is all in one place and happens every time 
+// and removes having to do too much in other places.
+void setCardPositions() {
+    // stock
+    da_foreach(Card*, c, &stock) {
+        Card *card = *c;
+        card->pos.x = stockPos.x;
+        card->pos.y = stockPos.y;
+    }
+
+    // waste
+    da_foreach(Card*, c, &waste) {
+        Card *card = *c;
+
+        card->pos.x = wastePos.x;
+        card->pos.y = wastePos.y;
+    }
+
+    // foundation
+    for (int i = 0; i < 4; i++) {
+        Vector2 pos = foundationPos[i];
+
+        Pile *pile = &foundation[i];
+        da_foreach(Card*, c, pile) {
+            Card *card = *c;
+
+            card->pos.x = pos.x;
+            card->pos.y = pos.y;
+        }
+    }
+    
+    // play
+    int x = SPACING * 2 + CARD_WIDTH;
+    int y = SPACING * 2 + CARD_HEIGHT;
+
+    for (int i = 0; i < 7; i++) {
+        Vector2 pos = { x * (i + 1), y };
+
+        Pile *pile = &play[i];
+        da_foreach(Card*, c, pile) {
+            Card *card = *c;
+
+            card->pos.x = pos.x;
+            card->pos.y = pos.y;
+
+            pos.y += SPACING;
+        }
+
+        pos.x += SPACING + CARD_WIDTH;
+    }
+
+    // grabbed
+    if (grabbed.count > 0) {
+        Vector2 pos = grabbed.items[0]->pos;
+
+        da_foreach(Card*, c, &grabbed) {
+            Card *card = *c;
+
+            card->pos.x = pos.x;
+            card->pos.y = pos.y;
+
+            pos.y += SPACING;
+        }
+
+        pos.x += SPACING + CARD_WIDTH;
+    }
+}
+
+void gameBoardInit() {
     Pile shuffle = {0};
     da_reserve(&shuffle, 52);
 
     for (int i = 0; i < 52; i++) {
-        da_append(&shuffle, &cards[i]);
+        Card *card = &cards[i];
+        card->visible = false;
+        da_append(&shuffle, card);
     }
-
-    int x = SPACING * 2 + CARD_WIDTH;
-    int y = SPACING * 2 + CARD_HEIGHT;
 
     int limit = 1;
     for (int i = 0; i < 7; i++) {
-        Vector2 pos = { x * (i + 1), y };
+        Pile *pile = &play[i];
+        pile->count = 0;
 
         for (int j = 0; j < limit; j++) {
             srand(time(NULL));
             int index = (rand() % shuffle.count);
             Card *choice = shuffle.items[index];
-            da_append(&play[i], choice);
+            da_append(pile, choice);
             da_remove_unordered(&shuffle, index);
-
-            choice->pos.x = pos.x;
-            choice->pos.y = pos.y;
-
-            pos.y += SPACING;
 
             if (j + 1 == limit) {
                 choice->visible = true;
             }
         }
 
-        pos.x += SPACING + CARD_WIDTH;
-
         limit++;
     }
+
+    for (int i = 0; i < 4; i++) {
+        Pile *pile = &foundation[i];
+        pile->count = 0;
+    }
+
+    stock.count = 0;
+    waste.count = 0;
 
     while (shuffle.count > 0) {
         srand(time(NULL));
@@ -190,6 +273,8 @@ void GameBoardInit() {
         da_append(&stock, card);
         da_remove_unordered(&shuffle, index);
     }
+
+    setCardPositions();
 }
 
 Rectangle getCardRectangle(Card card) {
@@ -197,34 +282,21 @@ Rectangle getCardRectangle(Card card) {
     return rec;
 }
 
-void setGrabbedCardInfo(Card *card, Vector2 mousePos) {
-    card->origPos.x = card->pos.x;
-    card->origPos.y = card->pos.y;
-
-    card->offset.x = mousePos.x - card->pos.x;
-    card->offset.y = mousePos.y - card->pos.y;
-}
-
-
 bool grabCard(Card *card, Vector2 mousePos) {
     Rectangle rect = getCardRectangle(*card);
-    if (!mouseDown && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, rect)) {
+    if (CheckCollisionPointRec(mousePos, rect)) {
+        printCard(card, "inside grabbed before", 0);
         mouseDown = true;
 
-        setGrabbedCardInfo(card, mousePos);
+        card->offset.x = mousePos.x - card->pos.x;
+        card->offset.y = mousePos.y - card->pos.y;
+
+        printCard(card, "inside grabbed before", 0);
 
         return true;
     }
 
     return false;
-}
-
-void printCard(Card card, char* message, int frameCount) {
-    if (!DEBUG) return;
-
-    if (frameCount % 120 == 0) {
-        printf("%s suit: %d, number: %d, pos: %f, %f\n", message, card.suit, card.number, card.pos.x, card.pos.y);
-    }
 }
 
 int main(void) {
@@ -233,8 +305,9 @@ int main(void) {
     SetTraceLogLevel(LOG_ERROR); 
     SetTargetFPS(60);
 
-    LoadCards();
-    GameBoardInit();
+    loadCards();
+    gameBoardInit();
+    // printCards();
 
     int frameCount = 0;
 
@@ -242,81 +315,70 @@ int main(void) {
         frameCount++;
         Vector2 mousePos = GetMousePosition();
 
-        // play
-        for (int i = 0; i < 7; i++) {
-            if (mouseDown) break;
+        if (IsKeyPressed(KEY_R)) {
+            gameBoardInit();
+        }
 
-            Pile pile = play[i];
-            int count = 0;
-            for (int j = pile.count - 1; j >= 0; j--) {
-                Card *card = pile.items[j];
-                if (!card->visible) break;
-                if (grabCard(card, mousePos)) {
-                    count = pile.count - j;
-                    break;
+        if (!mouseDown && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            // play
+            for (int i = 0; i < 7; i++) {
+                Pile *pile = &play[i];
+                int count = 0;
+                for (int j = pile->count - 1; j >= 0; j--) {
+                    Card *card = pile->items[j];
+                    if (!card->visible) break;
+                    if (grabCard(card, mousePos)) {
+                        count = pile->count - j;
+                        grabbedSource = pile;
+                        break;
+                    }
+                }
+
+                while (count > 0) {
+                    int index = pile->count - count;
+                    Card *card = pile->items[index];
+                    da_append(&grabbed, card);
+                    da_remove_ordered(pile, index);
+                    count--;
                 }
             }
 
-            if (mouseDown) {
-                // printf("count: %d:");
+            // waste
+            if (waste.count > 0 && !mouseDown) {
+                Card *card = da_last(&waste);
 
-                    
-                break;
+                printCard(card, "grabbed from waste", 0);
+                if (grabCard(card, mousePos)) {
+                    printCard(card, "grabbed from waste 2", 0);
+                    da_append(&grabbed, card);
+                    da_remove_unordered(&waste, waste.count - 1);
+                    printf("waste count %d", waste.count);
+
+                    grabbedSource = &waste;
+                }
             }
         }
-
-
-        // waist
-        if (waste.count > 0 && !mouseDown) {
-            Card *card = da_last(&waste);
-
-            if (grabCard(card, mousePos)) {
-                da_append(&grabbed, card);
-                da_remove_ordered(&waste, waste.count - 1);
-                grabbedSource = &waste;
-            }
-        }
-
-        // for (int i = 0; i < 52; i++) {
-        //     Card *card = &cards[i];
-        //
-        //     if (!card->visible) continue;
-        //
-        //     Rectangle rect = getCardRectangle(*card);
-        //
-        //     if (!mouseDown && IsMouseButtonDown(MOUSE_LEFT_BUTTON) && CheckCollisionPointRec(mousePos, rect)) {
-        //         mouseDown = true;
-        //         // we need to grab all the cards
-        //         da_append(&grabbed, card);
-        //         // grabbedSource = &grabbed;
-        //
-        //         card->origPos.x = card->pos.x;
-        //         card->origPos.y = card->pos.y;
-        //
-        //         offset.x = mousePos.x - card->pos.x;
-        //         offset.y = mousePos.y - card->pos.y;
-        //         break;
-        //     }
-        //
-        //
-        // }
 
         if (mouseDown) {
             da_foreach(Card*, c, &grabbed) {
                 Card *card = *c;
+                printCard(card, "grabbed", frameCount);
                 card->pos.x = mousePos.x - card->offset.x;
                 card->pos.y = mousePos.y - card->offset.y;
+                printCard(card, "grabbed", frameCount);
             }
         }
 
         if (grabbed.count > 0 && mouseDown && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
-
             bool placed = false;
             Card *place = grabbed.items[0];
 
             for (int i = 0; i < 7; i++) {
-                Pile pile = play[i];
-                Card *last = da_last(&pile);
+                Pile *pile = &play[i];
+
+                if (pile->count == 0) continue;
+
+                Card *last = da_last(pile);
                 Rectangle rect = getCardRectangle(*last);
                 if (CheckCollisionPointRec(mousePos, rect)) {
                     if (
@@ -331,8 +393,6 @@ int main(void) {
                         placed = true;
                         da_foreach(Card*, c, &grabbed) {
                             Card *card = *c;
-                            card->pos.x = last->pos.x;
-                            card->pos.y = last->pos.y + SPACING;
                             da_append(&play[i], card);
                             last = card;
                         }
@@ -346,17 +406,23 @@ int main(void) {
             for (int i = 0; i < 4; i++) {
                 if (grabbed.count > 1) break;
 
-                Pile pile = foundation[i];
-                // Card *card = da_last(&gr);
+                Vector2 pos = foundationPos[i];
+                Pile *pile = &foundation[i];
+                Rectangle rect = { pos.x, pos.y, CARD_WIDTH, CARD_HEIGHT };
+                Card *card = da_last(&grabbed);
 
-                // if (pile.count == 0 && card->number == 1) {
-                    // TODO
+                if (!CheckCollisionPointRec(mousePos, rect)) continue;
 
-                // }
-
-                Card *last = da_last(&pile);
-                Rectangle rect = getCardRectangle(*last);
-
+                if (pile->count == 0 && card->number == 1) {
+                    da_append(pile, card);
+                    placed = true;
+                } else {
+                    Card *last = da_last(pile);
+                    if (card->suit == last->suit && (card->number - 1) == last->number) {
+                        da_append(pile, card);
+                        placed = true;
+                    }
+                }
             }
 
             // put the cards back where they go
@@ -364,11 +430,10 @@ int main(void) {
                 da_foreach(Card*, c, &grabbed) {
                     Card *card = *c;
 
-                    card->pos.x = card->origPos.x;
-                    card->pos.y = card->origPos.y;
-
                     da_append(grabbedSource, card);
                 }
+            } else if (grabbedSource->count > 0) {
+                da_last(grabbedSource)->visible = true;
             }
 
             grabbed.count = 0;
@@ -395,8 +460,20 @@ int main(void) {
             card->pos.x = wastePos.x;
             card->pos.y = wastePos.y;
             card->visible = true;
-            printCard(*card, "", 0);
+            printCard(card, "", 0);
             da_append(&waste, card);
+        }
+
+        da_foreach(Card*, c, &grabbed) {
+            Card *card = *c;
+            printCard(card, "pre set", frameCount);
+        }
+
+        setCardPositions();
+
+        da_foreach(Card*, c, &grabbed) {
+            Card *card = *c;
+            printCard(card, "pos set", frameCount);
         }
 
         BeginDrawing();
@@ -410,18 +487,23 @@ int main(void) {
         if (waste.count > 0) {
             Card *card = da_last(&waste);
 
-            // printCard(*card, "", frameCount);
-
-            if (!containsCard(&grabbed, card)) {
-                DrawTextureV(card->texture, card->pos, RAYWHITE);
-            }
+            DrawTextureV(card->texture, card->pos, RAYWHITE);
         }
 
         for (int i = 0; i < 7; i++) {
+            Pile *pile = &play[i];
+            if (pile->count == 0) {
+                Vector2 pos = playPos[i];
+                Rectangle rec = { 
+                    pos.x - OUTLINE_THICKNESS, 
+                    pos.y - OUTLINE_THICKNESS, 
+                    CARD_WIDTH + OUTLINE_THICKNESS * 2, 
+                    CARD_HEIGHT + OUTLINE_THICKNESS * 2 
+                };
+                DrawRectangleLinesEx(rec, 5.0, BLACK);
+            }
             da_foreach(Card*, c, &play[i]) {
                 Card* card = *c;
-                if (containsCard(&grabbed, card)) continue;
-
                 if (card->visible) {
                     DrawTextureV(card->texture, card->pos, RAYWHITE);
                 } else {
@@ -430,26 +512,32 @@ int main(void) {
             }
         }
 
-        Vector2 pos = { (SPACING * 2 + CARD_WIDTH) * 4, SPACING };
-        float thickness = 5.0;
 
         for (int i = 0; i < 4; i++) {
-            Rectangle rec = { pos.x - thickness, pos.y - thickness, CARD_WIDTH + thickness * 2, CARD_HEIGHT + thickness * 2 };
+            Vector2 pos = foundationPos[i];
+            Rectangle rec = { 
+                pos.x - OUTLINE_THICKNESS, 
+                pos.y - OUTLINE_THICKNESS, 
+                CARD_WIDTH + OUTLINE_THICKNESS * 2, 
+                CARD_HEIGHT + OUTLINE_THICKNESS * 2 
+            };
+            Pile *pile = &foundation[i];
 
             if (foundation[i].count == 0) {
                 DrawRectangleLinesEx(rec, 5.0, BLACK);
+            } else {
+                Card card = *da_last(pile);
+                DrawTextureV(card.texture, card.pos, RAYWHITE);
             }
 
-            // DrawTextureV(card.texture, card.pos, RAYWHITE);
 
             pos.x += SPACING * 2 +  CARD_WIDTH;
         }
 
-        if (grabbed.count != 0) {
-            da_foreach(Card*, c, &grabbed) {
-                Card *card = *c;
-                DrawTextureV(card->texture, card->pos, RAYWHITE);
-            }
+        da_foreach(Card*, c, &grabbed) {
+            Card *card = *c;
+            printCard(card, "render grabbed", frameCount);
+            DrawTextureV(card->texture, card->pos, RAYWHITE);
         }
 
         EndDrawing();
