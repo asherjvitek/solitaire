@@ -285,13 +285,10 @@ Rectangle getCardRectangle(Card card) {
 bool grabCard(Card *card, Vector2 mousePos) {
     Rectangle rect = getCardRectangle(*card);
     if (CheckCollisionPointRec(mousePos, rect)) {
-        printCard(card, "inside grabbed before", 0);
         mouseDown = true;
 
         card->offset.x = mousePos.x - card->pos.x;
         card->offset.y = mousePos.y - card->pos.y;
-
-        printCard(card, "inside grabbed before", 0);
 
         return true;
     }
@@ -347,12 +344,9 @@ int main(void) {
             if (waste.count > 0 && !mouseDown) {
                 Card *card = da_last(&waste);
 
-                printCard(card, "grabbed from waste", 0);
                 if (grabCard(card, mousePos)) {
-                    printCard(card, "grabbed from waste 2", 0);
                     da_append(&grabbed, card);
                     da_remove_unordered(&waste, waste.count - 1);
-                    printf("waste count %d", waste.count);
 
                     grabbedSource = &waste;
                 }
@@ -362,10 +356,8 @@ int main(void) {
         if (mouseDown) {
             da_foreach(Card*, c, &grabbed) {
                 Card *card = *c;
-                printCard(card, "grabbed", frameCount);
                 card->pos.x = mousePos.x - card->offset.x;
                 card->pos.y = mousePos.y - card->offset.y;
-                printCard(card, "grabbed", frameCount);
             }
         }
 
@@ -455,26 +447,16 @@ int main(void) {
                 }
             }
 
-            da_remove_ordered(&stock, 0);
             Card *card = stock.items[0];
             card->pos.x = wastePos.x;
             card->pos.y = wastePos.y;
             card->visible = true;
-            printCard(card, "", 0);
+            da_remove_ordered(&stock, 0);
             da_append(&waste, card);
-        }
 
-        da_foreach(Card*, c, &grabbed) {
-            Card *card = *c;
-            printCard(card, "pre set", frameCount);
         }
 
         setCardPositions();
-
-        da_foreach(Card*, c, &grabbed) {
-            Card *card = *c;
-            printCard(card, "pos set", frameCount);
-        }
 
         BeginDrawing();
 
@@ -504,7 +486,7 @@ int main(void) {
             }
             da_foreach(Card*, c, &play[i]) {
                 Card* card = *c;
-                if (card->visible) {
+               if (card->visible) {
                     DrawTextureV(card->texture, card->pos, RAYWHITE);
                 } else {
                     DrawTextureV(cardBack, card->pos, RAYWHITE);
@@ -536,7 +518,6 @@ int main(void) {
 
         da_foreach(Card*, c, &grabbed) {
             Card *card = *c;
-            printCard(card, "render grabbed", frameCount);
             DrawTextureV(card->texture, card->pos, RAYWHITE);
         }
 
