@@ -7,10 +7,14 @@
 #define DEBUG true
 #define CARD_HEIGHT 150
 #define CARD_WIDTH 107
-#define SPACING 20.0
-#define CARD_WIDTH_SPACING (CARD_WIDTH + SPACING + SPACING)
-#define CARD_HEIGHT_SPACING (CARD_HEIGHT + SPACING + SPACING)
+#define SPACING 25.0
+#define CARD_WIDTH_SPACING (CARD_WIDTH + SPACING)
+#define CARD_HEIGHT_SPACING (CARD_HEIGHT + SPACING)
 #define OUTLINE_THICKNESS 0.5
+#define KING 13
+#define HEADER_HEIGHT 0
+#define WINDOW_HEIGHT 1000
+#define WINDOW_WIDTH 1200
 
 enum Suit { 
     SPADE,
@@ -38,13 +42,6 @@ typedef struct {
 
 #define new_card(id, suit, number, image) { id, suit, number, {0}, {0}, "./SVG-cards/png/2x/" image, {0} }
 
-bool containsCard(Pile *pile, Card *card) {
-    da_foreach(Card*, c, pile) {
-        if (card == *c) return true;
-    }
-    return false;
-}
-
 Texture2D cardBack = {0};
 Card cards[52] = {
     new_card(0, HEART, 1, "heart_1.png"),
@@ -59,7 +56,7 @@ Card cards[52] = {
     new_card(9, HEART, 10, "heart_10.png"),
     new_card(10, HEART, 11, "heart_jack.png"),
     new_card(11, HEART, 12, "heart_queen.png"),
-    new_card(12, HEART, 13, "heart_king.png"),
+    new_card(12, HEART, KING, "heart_king.png"),
     new_card(13, DIAMOND, 1, "diamond_1.png"),
     new_card(14, DIAMOND, 2, "diamond_2.png"),
     new_card(15, DIAMOND, 3, "diamond_3.png"),
@@ -72,7 +69,7 @@ Card cards[52] = {
     new_card(22, DIAMOND, 10, "diamond_10.png"),
     new_card(23, DIAMOND, 11, "diamond_jack.png"),
     new_card(24, DIAMOND, 12, "diamond_queen.png"),
-    new_card(25, DIAMOND, 13, "diamond_king.png"),
+    new_card(25, DIAMOND, KING, "diamond_king.png"),
     new_card(26, SPADE, 1, "spade_1.png"),
     new_card(27, SPADE, 2, "spade_2.png"),
     new_card(28, SPADE, 3, "spade_3.png"),
@@ -85,7 +82,7 @@ Card cards[52] = {
     new_card(35, SPADE, 10, "spade_10.png"),
     new_card(36, SPADE, 11, "spade_jack.png"),
     new_card(37, SPADE, 12, "spade_queen.png"),
-    new_card(38, SPADE, 13, "spade_king.png"),
+    new_card(38, SPADE, KING, "spade_king.png"),
     new_card(39, CLUB, 1, "club_1.png"),
     new_card(40, CLUB, 2, "club_2.png"),
     new_card(41, CLUB, 3, "club_3.png"),
@@ -98,7 +95,7 @@ Card cards[52] = {
     new_card(48, CLUB, 10, "club_10.png"),
     new_card(49, CLUB, 11, "club_jack.png"),
     new_card(50, CLUB, 12, "club_queen.png"),
-    new_card(51, CLUB, 13, "club_king.png"),
+    new_card(51, CLUB, KING, "club_king.png"),
 };
 
 Pile stock = {0};
@@ -108,23 +105,25 @@ Pile play[7] = {0};
 Pile grabbed = {0};
 Pile *grabbedSource = NULL;
 bool mouseDown = false;
+bool won = false;
 
-Vector2 stockPos = { SPACING, SPACING };
-Vector2 wastePos = { CARD_WIDTH + SPACING * 2, SPACING };
+Vector2 stockPos = { SPACING, HEADER_HEIGHT + SPACING };
+Vector2 wastePos = { CARD_WIDTH + HEADER_HEIGHT + SPACING * 2, SPACING };
 Vector2 playPos[7] = { 
-    { CARD_WIDTH_SPACING * 1, CARD_HEIGHT_SPACING },
-    { CARD_WIDTH_SPACING * 2, CARD_HEIGHT_SPACING },
-    { CARD_WIDTH_SPACING * 3, CARD_HEIGHT_SPACING },
-    { CARD_WIDTH_SPACING * 4, CARD_HEIGHT_SPACING },
-    { CARD_WIDTH_SPACING * 5, CARD_HEIGHT_SPACING },
-    { CARD_WIDTH_SPACING * 6, CARD_HEIGHT_SPACING },
+    { CARD_WIDTH_SPACING * 0 + SPACING, HEADER_HEIGHT + CARD_HEIGHT_SPACING + SPACING },
+    { CARD_WIDTH_SPACING * 1 + SPACING, HEADER_HEIGHT + CARD_HEIGHT_SPACING + SPACING },
+    { CARD_WIDTH_SPACING * 2 + SPACING, HEADER_HEIGHT + CARD_HEIGHT_SPACING + SPACING },
+    { CARD_WIDTH_SPACING * 3 + SPACING, HEADER_HEIGHT + CARD_HEIGHT_SPACING + SPACING },
+    { CARD_WIDTH_SPACING * 4 + SPACING, HEADER_HEIGHT + CARD_HEIGHT_SPACING + SPACING },
+    { CARD_WIDTH_SPACING * 5 + SPACING, HEADER_HEIGHT + CARD_HEIGHT_SPACING + SPACING },
+    { CARD_WIDTH_SPACING * 6 + SPACING, HEADER_HEIGHT + CARD_HEIGHT_SPACING + SPACING },
 };
 
 Vector2 foundationPos[4] = { 
-    { CARD_WIDTH_SPACING * 4, SPACING },
-    { CARD_WIDTH_SPACING * 5, SPACING },
-    { CARD_WIDTH_SPACING * 6, SPACING },
-    { CARD_WIDTH_SPACING * 7, SPACING },
+    { CARD_WIDTH_SPACING * 3 + SPACING, HEADER_HEIGHT + SPACING },
+    { CARD_WIDTH_SPACING * 4 + SPACING, HEADER_HEIGHT + SPACING },
+    { CARD_WIDTH_SPACING * 5 + SPACING, HEADER_HEIGHT + SPACING },
+    { CARD_WIDTH_SPACING * 6 + SPACING, HEADER_HEIGHT + SPACING },
 };
 
 
@@ -192,11 +191,8 @@ void setCardPositions() {
     }
     
     // play
-    int x = SPACING * 2 + CARD_WIDTH;
-    int y = SPACING * 2 + CARD_HEIGHT;
-
     for (int i = 0; i < 7; i++) {
-        Vector2 pos = { x * (i + 1), y };
+        Vector2 pos = playPos[i];
 
         Pile *pile = &play[i];
         da_foreach(Card*, c, pile) {
@@ -277,13 +273,13 @@ void gameBoardInit() {
     setCardPositions();
 }
 
-Rectangle getCardRectangle(Card card) {
-    Rectangle rec = { card.pos.x, card.pos.y, CARD_WIDTH, CARD_HEIGHT };
+Rectangle getCardRectangle(Vector2 pos) {
+    Rectangle rec = { pos.x, pos.y, CARD_WIDTH, CARD_HEIGHT };
     return rec;
 }
 
 bool grabCard(Card *card, Vector2 mousePos) {
-    Rectangle rect = getCardRectangle(*card);
+    Rectangle rect = getCardRectangle(card->pos);
     if (CheckCollisionPointRec(mousePos, rect)) {
         mouseDown = true;
 
@@ -296,15 +292,332 @@ bool grabCard(Card *card, Vector2 mousePos) {
     return false;
 }
 
+void handleRightClick(Vector2 mousePos) {
+    if (!IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) return;
+
+    for (int i = 0; i < 7; i++) {
+        Pile *pile = &play[i];
+        if (pile->count == 0) continue;
+
+        Card *card = da_last(pile);
+        Rectangle rect = getCardRectangle(card->pos);
+
+        if (!CheckCollisionPointRec(mousePos, rect)) continue;
+
+        for (int f = 0; f < 4; f++) {
+            Pile *found = &foundation[f];
+
+            if (card->number == 1) {
+                if (found->count > 0) continue;
+                da_append(found, card);
+                da_remove_unordered(pile, pile->count - 1);
+                if (pile-> count > 0) {
+                    da_last(pile)->visible = true;
+                }
+                return;
+            } else if (found->count > 0) {
+                Card *last = da_last(found);
+                if (last->suit == card->suit && last->number == card->number - 1) {
+                    da_append(found, card);
+                    da_remove_unordered(pile, pile->count - 1);
+                    if (pile-> count > 0) {
+                        da_last(pile)->visible = true;
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    if (waste.count == 0) return;
+
+    Rectangle rect = getCardRectangle(wastePos);
+
+    if (!CheckCollisionPointRec(mousePos, rect)) return;
+
+    Card *card = da_last(&waste);
+
+    for (int f = 0; f < 4; f++) {
+        Pile *found = &foundation[f];
+
+        if (card->number == 1 && found->count == 0) {
+            da_append(found, card);
+            da_remove_unordered(&waste, waste.count - 1);
+            return;
+
+        } else if (found->count > 0) {
+            Card *last = da_last(found);
+            if (last->suit == card->suit && last->number == card->number - 1) {
+                da_append(found, card);
+                da_remove_unordered(&waste, waste.count - 1);
+                return;
+            }
+        }
+    }
+}
+
+void handleGrabbingCards(Vector2 mousePos) {
+    if (mouseDown) return;
+
+    if (!IsMouseButtonDown(MOUSE_LEFT_BUTTON)) return;
+
+    // play
+    for (int i = 0; i < 7; i++) {
+        Pile *pile = &play[i];
+        int count = 0;
+        for (int j = pile->count - 1; j >= 0; j--) {
+            Card *card = pile->items[j];
+            if (!card->visible) break;
+            if (grabCard(card, mousePos)) {
+                count = pile->count - j;
+                grabbedSource = pile;
+                break;
+            }
+        }
+
+        while (count > 0) {
+            int index = pile->count - count;
+            Card *card = pile->items[index];
+            da_append(&grabbed, card);
+            da_remove_ordered(pile, index);
+            count--;
+        }
+    }
+
+    // waste
+    if (waste.count > 0 && !mouseDown) {
+        Card *card = da_last(&waste);
+
+        if (grabCard(card, mousePos)) {
+            da_append(&grabbed, card);
+            da_remove_unordered(&waste, waste.count - 1);
+
+            grabbedSource = &waste;
+        }
+    }
+}
+
+void setGrabbedCardsPositions(Vector2 mousePos) {
+    // Set the position of all the grabbed cards
+    if (mouseDown) {
+        da_foreach(Card*, c, &grabbed) {
+            Card *card = *c;
+            card->pos.x = mousePos.x - card->offset.x;
+            card->pos.y = mousePos.y - card->offset.y;
+        }
+    }
+}
+
+void handlePlacingCard(Vector2 mousePos) {
+    if (grabbed.count == 0) return;
+    if (!mouseDown) return;
+    if (!IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) return;
+
+    bool placed = false;
+    Card *place = grabbed.items[0];
+
+    for (int i = 0; i < 7; i++) {
+        Pile *pile = &play[i];
+
+        // check for king
+        Rectangle empty = getCardRectangle(playPos[i]);
+        if (pile->count == 0 && place->number == KING && CheckCollisionPointRec(mousePos, empty)) {
+            placed = true;
+            da_foreach(Card*, c, &grabbed) {
+                Card *card = *c;
+                da_append(&play[i], card);
+            }
+
+            break;
+        }
+
+        if (pile->count == 0) continue;
+
+        Card *last = da_last(pile);
+        Rectangle rect = getCardRectangle(last->pos);
+        if (CheckCollisionPointRec(mousePos, rect)) {
+            if (
+                (
+                    ((place->suit == HEART || place->suit == DIAMOND)
+                    && (last->suit == CLUB || last->suit == SPADE))
+                    || ((last->suit == HEART || last->suit == DIAMOND)
+                    && (place->suit == CLUB || place->suit == SPADE))
+                )
+                && place->number + 1 == last->number
+            ) {
+                placed = true;
+                da_foreach(Card*, c, &grabbed) {
+                    Card *card = *c;
+                    da_append(&play[i], card);
+                }
+            } else {
+                placed = false;
+            }
+
+            break;
+        }
+    }
+
+    // foundation
+    for (int i = 0; i < 4; i++) {
+        if (grabbed.count > 1) break;
+
+        Vector2 pos = foundationPos[i];
+        Pile *pile = &foundation[i];
+        Rectangle rect = getCardRectangle(pos);
+        Card *card = da_last(&grabbed);
+
+        if (!CheckCollisionPointRec(mousePos, rect)) continue;
+
+        if (pile->count == 0 && card->number == 1) {
+            da_append(pile, card);
+            placed = true;
+        } else {
+            Card *last = da_last(pile);
+            if (card->suit == last->suit && (card->number - 1) == last->number) {
+                da_append(pile, card);
+                placed = true;
+            }
+        }
+    }
+
+    // put the cards back where they go
+    if (!placed) {
+        da_foreach(Card*, c, &grabbed) {
+            Card *card = *c;
+
+            da_append(grabbedSource, card);
+        }
+    } else if (grabbedSource->count > 0) {
+        da_last(grabbedSource)->visible = true;
+    }
+
+    grabbed.count = 0;
+    grabbedSource = NULL;
+    mouseDown = false;
+}
+
+void handleDrawFromStock(Vector2 mousePos) {
+    Rectangle drawRect = getCardRectangle(stockPos);
+    if (CheckCollisionPointRec(mousePos, drawRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+
+        if (stock.count == 0) {
+            while (waste.count > 0) {
+                Card *card = waste.items[0];                    
+                card->pos.x = stockPos.x;
+                card->pos.y = stockPos.y;
+                card->visible = false;
+                da_remove_ordered(&waste, 0);
+                da_append(&stock, card);
+            }
+        }
+
+        Card *card = stock.items[0];
+        card->pos.x = wastePos.x;
+        card->pos.y = wastePos.y;
+        card->visible = true;
+        da_remove_ordered(&stock, 0);
+        da_append(&waste, card);
+    }
+}
+
+void drawGame() {
+    BeginDrawing();
+
+    ClearBackground(GREEN);
+
+    DrawRectangle(0, 0, WINDOW_WIDTH, HEADER_HEIGHT, LIGHTGRAY);
+
+    if (stock.count > 0) {
+        DrawTextureV(cardBack, stockPos, RAYWHITE);
+    } else {
+        Rectangle rect = getCardRectangle(stockPos);
+        DrawRectangleLinesEx(rect, 5.0, BLACK);
+    }
+
+    if (waste.count > 0) {
+        Card *card = da_last(&waste);
+
+        DrawTextureV(card->texture, card->pos, RAYWHITE);
+    }
+
+    for (int i = 0; i < 7; i++) {
+        Pile *pile = &play[i];
+        if (pile->count == 0) {
+            Vector2 pos = playPos[i];
+            Rectangle rec = { 
+                pos.x - OUTLINE_THICKNESS, 
+                pos.y - OUTLINE_THICKNESS, 
+                CARD_WIDTH + OUTLINE_THICKNESS * 2, 
+                CARD_HEIGHT + OUTLINE_THICKNESS * 2 
+            };
+            DrawRectangleLinesEx(rec, 5.0, BLACK);
+        }
+        da_foreach(Card*, c, &play[i]) {
+            Card* card = *c;
+           if (card->visible) {
+                DrawTextureV(card->texture, card->pos, RAYWHITE);
+            } else {
+                DrawTextureV(cardBack, card->pos, RAYWHITE);
+            }
+        }
+    }
+
+
+    for (int i = 0; i < 4; i++) {
+        Vector2 pos = foundationPos[i];
+        Rectangle rec = { 
+            pos.x - OUTLINE_THICKNESS, 
+            pos.y - OUTLINE_THICKNESS, 
+            CARD_WIDTH + OUTLINE_THICKNESS * 2, 
+            CARD_HEIGHT + OUTLINE_THICKNESS * 2 
+        };
+        Pile *pile = &foundation[i];
+
+        if (foundation[i].count == 0) {
+            DrawRectangleLinesEx(rec, 5.0, BLACK);
+        } else {
+            Card card = *da_last(pile);
+            DrawTextureV(card.texture, card.pos, RAYWHITE);
+        }
+
+
+        pos.x += SPACING * 2 +  CARD_WIDTH;
+    }
+
+    da_foreach(Card*, c, &grabbed) {
+        Card *card = *c;
+        DrawTextureV(card->texture, card->pos, RAYWHITE);
+    }
+
+    if (won) {
+        Font font = GetFontDefault();
+        int fontSize = 20;
+        char* text = "You WIN!"; 
+        Vector2 size = MeasureTextEx(font, text, fontSize, 1.0);
+        DrawText(text, WINDOW_WIDTH / 2 - size.x / 2, WINDOW_HEIGHT / 2 - size.y / 2, 20, BLACK);
+    }
+
+    EndDrawing();
+}
+
+bool checkIfGameWon() {
+    int count = 0;
+    for (int i = 0; i < 4; i++) {
+        count += foundation[i].count;
+    }
+
+    return count == 52;
+}
+
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(1200, 800, "Solitaire");
+    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Solitaire");
     SetTraceLogLevel(LOG_ERROR); 
     SetTargetFPS(60);
 
     loadCards();
     gameBoardInit();
-    // printCards();
 
     int frameCount = 0;
 
@@ -314,214 +627,57 @@ int main(void) {
 
         if (IsKeyPressed(KEY_R)) {
             gameBoardInit();
+            won = false;
         }
 
-        if (!mouseDown && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-            // play
-            for (int i = 0; i < 7; i++) {
-                Pile *pile = &play[i];
-                int count = 0;
-                for (int j = pile->count - 1; j >= 0; j--) {
-                    Card *card = pile->items[j];
-                    if (!card->visible) break;
-                    if (grabCard(card, mousePos)) {
-                        count = pile->count - j;
-                        grabbedSource = pile;
-                        break;
-                    }
-                }
+        if (won) {
 
-                while (count > 0) {
-                    int index = pile->count - count;
-                    Card *card = pile->items[index];
-                    da_append(&grabbed, card);
-                    da_remove_ordered(pile, index);
-                    count--;
-                }
-            }
+            drawGame();
 
-            // waste
-            if (waste.count > 0 && !mouseDown) {
-                Card *card = da_last(&waste);
-
-                if (grabCard(card, mousePos)) {
-                    da_append(&grabbed, card);
-                    da_remove_unordered(&waste, waste.count - 1);
-
-                    grabbedSource = &waste;
-                }
-            }
+            
+            continue;
         }
 
-        if (mouseDown) {
-            da_foreach(Card*, c, &grabbed) {
-                Card *card = *c;
-                card->pos.x = mousePos.x - card->offset.x;
-                card->pos.y = mousePos.y - card->offset.y;
-            }
-        }
+        won = checkIfGameWon();
 
-        if (grabbed.count > 0 && mouseDown && IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
-            bool placed = false;
-            Card *place = grabbed.items[0];
+        if (IsKeyPressed(KEY_W) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
+            won = true;
+            while (stock.count > 0) {
+                da_remove_unordered(&stock, 0); 
+            }
+
+            while (waste.count > 0) {
+                da_remove_unordered(&waste, 0); 
+            }
 
             for (int i = 0; i < 7; i++) {
                 Pile *pile = &play[i];
-
-                if (pile->count == 0) continue;
-
-                Card *last = da_last(pile);
-                Rectangle rect = getCardRectangle(*last);
-                if (CheckCollisionPointRec(mousePos, rect)) {
-                    if (
-                        (
-                            ((place->suit == HEART || place->suit == DIAMOND)
-                            && (last->suit == CLUB || last->suit == SPADE))
-                            || ((last->suit == HEART || last->suit == DIAMOND)
-                            && (place->suit == CLUB || place->suit == SPADE))
-                        )
-                        && place->number + 1 == last->number
-                    ) {
-                        placed = true;
-                        da_foreach(Card*, c, &grabbed) {
-                            Card *card = *c;
-                            da_append(&play[i], card);
-                            last = card;
-                        }
-                    } else {
-                        placed = false;
-                    }
+                while (pile->count > 0) {
+                    da_remove_unordered(pile, 0); 
                 }
             }
 
-            // foundation
-            for (int i = 0; i < 4; i++) {
-                if (grabbed.count > 1) break;
-
-                Vector2 pos = foundationPos[i];
-                Pile *pile = &foundation[i];
-                Rectangle rect = { pos.x, pos.y, CARD_WIDTH, CARD_HEIGHT };
-                Card *card = da_last(&grabbed);
-
-                if (!CheckCollisionPointRec(mousePos, rect)) continue;
-
-                if (pile->count == 0 && card->number == 1) {
-                    da_append(pile, card);
-                    placed = true;
-                } else {
-                    Card *last = da_last(pile);
-                    if (card->suit == last->suit && (card->number - 1) == last->number) {
-                        da_append(pile, card);
-                        placed = true;
-                    }
+            int index = 0;
+            for (int i = 0; i < 52; i++) {
+                if (i != 0 && i % 13 == 0) {
+                    index++;
                 }
+
+                da_append(&foundation[index], &cards[i]);
+
             }
-
-            // put the cards back where they go
-            if (!placed) {
-                da_foreach(Card*, c, &grabbed) {
-                    Card *card = *c;
-
-                    da_append(grabbedSource, card);
-                }
-            } else if (grabbedSource->count > 0) {
-                da_last(grabbedSource)->visible = true;
-            }
-
-            grabbed.count = 0;
-            grabbedSource = NULL;
-            mouseDown = false;
         }
 
-        Rectangle drawRect = { stockPos.x, stockPos.y, CARD_WIDTH, CARD_HEIGHT };
-        if (CheckCollisionPointRec(mousePos, drawRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
 
-            if (stock.count == 0) {
-                while (waste.count > 0) {
-                    Card *card = waste.items[0];                    
-                    card->pos.x = stockPos.x;
-                    card->pos.y = stockPos.y;
-                    card->visible = false;
-                    da_remove_ordered(&waste, 0);
-                    da_append(&stock, card);
-                }
-            }
-
-            Card *card = stock.items[0];
-            card->pos.x = wastePos.x;
-            card->pos.y = wastePos.y;
-            card->visible = true;
-            da_remove_ordered(&stock, 0);
-            da_append(&waste, card);
-
-        }
-
+        handleRightClick(mousePos);
+        handleGrabbingCards(mousePos);
+        setGrabbedCardsPositions(mousePos);
+        handlePlacingCard(mousePos);
+        handleDrawFromStock(mousePos);
         setCardPositions();
 
-        BeginDrawing();
+        drawGame();
 
-        ClearBackground(GREEN);
-
-        if (stock.count > 0) {
-            DrawTextureV(cardBack, stockPos, RAYWHITE);
-        }
-
-        if (waste.count > 0) {
-            Card *card = da_last(&waste);
-
-            DrawTextureV(card->texture, card->pos, RAYWHITE);
-        }
-
-        for (int i = 0; i < 7; i++) {
-            Pile *pile = &play[i];
-            if (pile->count == 0) {
-                Vector2 pos = playPos[i];
-                Rectangle rec = { 
-                    pos.x - OUTLINE_THICKNESS, 
-                    pos.y - OUTLINE_THICKNESS, 
-                    CARD_WIDTH + OUTLINE_THICKNESS * 2, 
-                    CARD_HEIGHT + OUTLINE_THICKNESS * 2 
-                };
-                DrawRectangleLinesEx(rec, 5.0, BLACK);
-            }
-            da_foreach(Card*, c, &play[i]) {
-                Card* card = *c;
-               if (card->visible) {
-                    DrawTextureV(card->texture, card->pos, RAYWHITE);
-                } else {
-                    DrawTextureV(cardBack, card->pos, RAYWHITE);
-                }
-            }
-        }
-
-
-        for (int i = 0; i < 4; i++) {
-            Vector2 pos = foundationPos[i];
-            Rectangle rec = { 
-                pos.x - OUTLINE_THICKNESS, 
-                pos.y - OUTLINE_THICKNESS, 
-                CARD_WIDTH + OUTLINE_THICKNESS * 2, 
-                CARD_HEIGHT + OUTLINE_THICKNESS * 2 
-            };
-            Pile *pile = &foundation[i];
-
-            if (foundation[i].count == 0) {
-                DrawRectangleLinesEx(rec, 5.0, BLACK);
-            } else {
-                Card card = *da_last(pile);
-                DrawTextureV(card.texture, card.pos, RAYWHITE);
-            }
-
-
-            pos.x += SPACING * 2 +  CARD_WIDTH;
-        }
-
-        da_foreach(Card*, c, &grabbed) {
-            Card *card = *c;
-            DrawTextureV(card->texture, card->pos, RAYWHITE);
-        }
-
-        EndDrawing();
     }
 
     CloseWindow();
