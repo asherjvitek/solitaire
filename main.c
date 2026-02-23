@@ -40,6 +40,13 @@ typedef struct {
     int capacity;
 } Pile;
 
+typedef struct {
+    Card *items;
+    int count;
+    int capacity;
+} CardSplosion;
+
+
 #define new_card(id, suit, number, image) { id, suit, number, {0}, {0}, "./SVG-cards/png/2x/" image, {0} }
 
 Texture2D cardBack = {0};
@@ -104,6 +111,7 @@ Pile foundation[4] = {0};
 Pile play[7] = {0};
 Pile grabbed = {0};
 Pile *grabbedSource = NULL;
+CardSplosion cardSplosion = {0};
 bool mouseDown = false;
 bool won = false;
 
@@ -385,7 +393,7 @@ void handleGrabbingCards(Vector2 mousePos) {
     }
 
     // waste
-    if (waste.count > 0 && !mouseDown) {
+    if (waste.count > 0) {
         Card *card = da_last(&waste);
 
         if (grabCard(card, mousePos)) {
@@ -393,6 +401,22 @@ void handleGrabbingCards(Vector2 mousePos) {
             da_remove_unordered(&waste, waste.count - 1);
 
             grabbedSource = &waste;
+        }
+    }
+
+    // foundation
+    for (int i = 0; i < 4; i++) {
+        Pile *pile = &foundation[i];
+
+        if (pile->count > 0) {
+            Card *card = da_last(pile);
+
+            if (grabCard(card, mousePos)) {
+                da_append(&grabbed, card);
+                da_remove_unordered(pile, pile->count - 1);
+
+                grabbedSource = pile;
+            }
         }
     }
 }
@@ -498,6 +522,8 @@ void handlePlacingCard(Vector2 mousePos) {
 }
 
 void handleDrawFromStock(Vector2 mousePos) {
+    if (stock.count == 0 && waste.count == 0) return;
+
     Rectangle drawRect = getCardRectangle(stockPos);
     if (CheckCollisionPointRec(mousePos, drawRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
 
@@ -526,7 +552,16 @@ void drawGame() {
 
     ClearBackground(GREEN);
 
-    DrawRectangle(0, 0, WINDOW_WIDTH, HEADER_HEIGHT, LIGHTGRAY);
+    Font font = GetFontDefault();
+    int fontSize = 20;
+
+    // DrawRectangle(0, 0, WINDOW_WIDTH, HEADER_HEIGHT, GREEN);
+
+    char* text = "Esc = Quit    R = Reset"; 
+    Vector2 size = MeasureTextEx(font, text, fontSize, 1.0);
+    DrawText(text, SPACING, SPACING / 2 - size.y / 2, 20, BLACK);
+
+
 
     if (stock.count > 0) {
         DrawTextureV(cardBack, stockPos, RAYWHITE);
@@ -566,23 +601,22 @@ void drawGame() {
 
     for (int i = 0; i < 4; i++) {
         Vector2 pos = foundationPos[i];
+        Pile *pile = &foundation[i];
         Rectangle rec = { 
             pos.x - OUTLINE_THICKNESS, 
             pos.y - OUTLINE_THICKNESS, 
             CARD_WIDTH + OUTLINE_THICKNESS * 2, 
             CARD_HEIGHT + OUTLINE_THICKNESS * 2 
         };
-        Pile *pile = &foundation[i];
 
         if (foundation[i].count == 0) {
             DrawRectangleLinesEx(rec, 5.0, BLACK);
         } else {
-            Card card = *da_last(pile);
-            DrawTextureV(card.texture, card.pos, RAYWHITE);
+            da_foreach(Card*, c, pile) {
+                Card *card = *c;
+                DrawTextureV(card->texture, card->pos, RAYWHITE);
+            }
         }
-
-
-        pos.x += SPACING * 2 +  CARD_WIDTH;
     }
 
     da_foreach(Card*, c, &grabbed) {
@@ -591,11 +625,13 @@ void drawGame() {
     }
 
     if (won) {
-        Font font = GetFontDefault();
-        int fontSize = 20;
-        char* text = "You WIN!"; 
-        Vector2 size = MeasureTextEx(font, text, fontSize, 1.0);
-        DrawText(text, WINDOW_WIDTH / 2 - size.x / 2, WINDOW_HEIGHT / 2 - size.y / 2, 20, BLACK);
+        // fontSize = 40;
+        // text = "You WIN!"; 
+        // size = MeasureTextEx(font, text, fontSize, 1.0);
+        // DrawText(text, WINDOW_WIDTH / 2 - size.x / 2, WINDOW_HEIGHT / 2 - size.y / 2, 20, BLACK);
+        da_foreach(Card, card, &cardSplosion) {
+            DrawTextureV(card->texture, card->pos, RAYWHITE);
+        }
     }
 
     EndDrawing();
@@ -610,6 +646,33 @@ bool checkIfGameWon() {
     return count == 52;
 }
 
+void setGameToWonState() {
+    won = true;
+    while (stock.count > 0) {
+        da_remove_unordered(&stock, 0); 
+    }
+
+    while (waste.count > 0) {
+        da_remove_unordered(&waste, 0); 
+    }
+
+    for (int i = 0; i < 7; i++) {
+        Pile *pile = &play[i];
+        while (pile->count > 0) {
+            da_remove_unordered(pile, 0); 
+        }
+    }
+
+    int index = 0;
+    for (int i = 0; i < 52; i++) {
+        if (i != 0 && i % 13 == 0) {
+            index++;
+        }
+
+        da_append(&foundation[index], &cards[i]);
+    }
+}
+
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Solitaire");
@@ -620,6 +683,8 @@ int main(void) {
     gameBoardInit();
 
     int frameCount = 0;
+    int cardSplosionIndex = 51;
+    Vector2 cardMoveDefault = { 5, 5 };
 
     while(!WindowShouldClose()) {
         frameCount++;
@@ -627,45 +692,47 @@ int main(void) {
 
         if (IsKeyPressed(KEY_R)) {
             gameBoardInit();
+            cardSplosionIndex = 51;
             won = false;
         }
 
         if (won) {
 
-            drawGame();
+            if (cardSplosionIndex < 0) {
+                drawGame();
+                
+                continue;
+            }
 
+            Card card = {0};
+            if (cardSplosion.count == 0) {
+                card = cards[cardSplosionIndex];
+            } else {
+                card = da_last(&cardSplosion);
+            }
+
+            if (card.pos.x + CARD_WIDTH < 0 || card.pos.x > WINDOW_WIDTH || card.pos.y + CARD_HEIGHT > WINDOW_HEIGHT) {
+                cardSplosionIndex--;
+
+                if (cardSplosionIndex > 0) {
+                    card = cards[cardSplosionIndex];
+                } 
+            }
+
+            card.pos.x += cardMoveDefault.x;
+            card.pos.y += cardMoveDefault.y;
+
+            da_append(&cardSplosion, card);
+
+            drawGame();
             
             continue;
         }
 
         won = checkIfGameWon();
 
-        if (IsKeyPressed(KEY_W) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
-            won = true;
-            while (stock.count > 0) {
-                da_remove_unordered(&stock, 0); 
-            }
-
-            while (waste.count > 0) {
-                da_remove_unordered(&waste, 0); 
-            }
-
-            for (int i = 0; i < 7; i++) {
-                Pile *pile = &play[i];
-                while (pile->count > 0) {
-                    da_remove_unordered(pile, 0); 
-                }
-            }
-
-            int index = 0;
-            for (int i = 0; i < 52; i++) {
-                if (i != 0 && i % 13 == 0) {
-                    index++;
-                }
-
-                da_append(&foundation[index], &cards[i]);
-
-            }
+        if (!won && IsKeyPressed(KEY_W) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
+            setGameToWonState();
         }
 
 
