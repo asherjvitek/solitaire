@@ -233,6 +233,7 @@ void setCardPositions() {
 }
 
 void gameBoardInit() {
+    cardSplosion.count = 0;
     Pile shuffle = {0};
     da_reserve(&shuffle, 52);
 
@@ -677,7 +678,7 @@ int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Solitaire");
     SetTraceLogLevel(LOG_ERROR); 
-    SetTargetFPS(60);
+    SetTargetFPS(200);
 
     loadCards();
     gameBoardInit();
@@ -685,6 +686,10 @@ int main(void) {
     int frameCount = 0;
     int cardSplosionIndex = 51;
     Vector2 cardMoveDefault = { 5, 5 };
+    int bounceIter = 10;
+    int direction = 1;
+    int reduction = 1;
+    int currentY = 0;
 
     while(!WindowShouldClose()) {
         frameCount++;
@@ -711,8 +716,44 @@ int main(void) {
                 card = da_last(&cardSplosion);
             }
 
-            if (card.pos.x + CARD_WIDTH < 0 || card.pos.x > WINDOW_WIDTH || card.pos.y + CARD_HEIGHT > WINDOW_HEIGHT) {
+            if (bounceIter == 0) {
+                cardMoveDefault.y = currentY;
+                if (direction == 1) {
+                    reduction = cardMoveDefault.y / 5;
+                    bounceIter = 5;
+                    direction = -1;
+                } else {
+                    reduction = cardMoveDefault.y / 10;
+                    cardMoveDefault.y = 0;
+                    bounceIter = 10;
+                    direction = 1;
+                }
+            }
+
+            bounceIter--;
+            if (direction == 1) {
+                cardMoveDefault.y += reduction;
+            } else {
+                cardMoveDefault.y -= reduction;
+            }
+
+            if (card.pos.y + CARD_HEIGHT < 0 || card.pos.x + CARD_WIDTH <= 0 || card.pos.x >= WINDOW_WIDTH || card.pos.y + CARD_HEIGHT >= WINDOW_HEIGHT) {
                 cardSplosionIndex--;
+
+                srand(time(NULL));
+                cardMoveDefault.x = (rand() % 20) - 10;
+
+                // if (cardMoveDefault.x >= 0 && cardMoveDefault.x < 2) {
+                //     cardMoveDefault.x = 2;
+                // }
+                //
+                // if (cardMoveDefault.x > -2 && cardMoveDefault.x < 0) {
+                //     cardMoveDefault.x = -2;
+                // }
+
+                srand(time(NULL));
+                cardMoveDefault.y = (rand() % 20) + 10;
+                currentY = cardMoveDefault.y;
 
                 if (cardSplosionIndex > 0) {
                     card = cards[cardSplosionIndex];
@@ -720,7 +761,7 @@ int main(void) {
             }
 
             card.pos.x += cardMoveDefault.x;
-            card.pos.y += cardMoveDefault.y;
+            card.pos.y += (cardMoveDefault.y * direction);
 
             da_append(&cardSplosion, card);
 
@@ -734,7 +775,6 @@ int main(void) {
         if (!won && IsKeyPressed(KEY_W) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
             setGameToWonState();
         }
-
 
         handleRightClick(mousePos);
         handleGrabbingCards(mousePos);
