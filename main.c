@@ -761,8 +761,6 @@ int main(void) {
         screenWidth = GetRenderWidth();
         screenHeight = GetRenderHeight();
 
-        if (frameCount % 120 == 0) printf("height %d width %d", screenHeight, screenWidth);
-
         frameCount++;
         Vector2 mousePos = GetMousePosition();
 
