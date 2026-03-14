@@ -128,6 +128,8 @@ Vector2 cardMoveDefault = { 5, 0 };
 int direction = -1;
 int reduction = 0;
 int currentY = 0;
+int screenHeight = WINDOW_HEIGHT;
+int screenWidth = WINDOW_WIDTH;
 
 Vector2 stockPos = { SPACING, HEADER_HEIGHT + SPACING };
 Vector2 wastePos = { CARD_WIDTH + HEADER_HEIGHT + SPACING * 2, SPACING };
@@ -564,8 +566,6 @@ void drawGame() {
     Font font = GetFontDefault();
     int fontSize = 20;
 
-    // DrawRectangle(0, 0, WINDOW_WIDTH, HEADER_HEIGHT, GREEN);
-
     char* text = "Esc = Quit    R = Reset"; 
     Vector2 size = MeasureTextEx(font, text, fontSize, 1.0);
     DrawText(text, SPACING, SPACING / 2 - size.y / 2, 20, BLACK);
@@ -694,7 +694,7 @@ void handleGameWon() {
         card = da_last(&cardSplosion);
     }
 
-    if (card.pos.y + CARD_HEIGHT < 0 || card.pos.x + CARD_WIDTH <= 0 || card.pos.x >= WINDOW_WIDTH || card.pos.y + CARD_HEIGHT >= WINDOW_HEIGHT || firstTime) {
+    if (card.pos.y + CARD_HEIGHT < 0 || card.pos.x + CARD_WIDTH <= 0 || card.pos.x >= screenWidth || card.pos.y + CARD_HEIGHT >= screenHeight || firstTime) {
         if (!firstTime) cardSplosionIndex--;
 
         srand(time(NULL));
@@ -748,7 +748,7 @@ void changeWasteType() {
 
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Solitaire");
+    InitWindow(screenWidth, screenHeight, "Solitaire");
     SetTraceLogLevel(LOG_ERROR); 
     SetTargetFPS(60);
 
@@ -758,6 +758,11 @@ int main(void) {
     int frameCount = 0;
 
     while(!WindowShouldClose()) {
+        screenWidth = GetRenderWidth();
+        screenHeight = GetRenderHeight();
+
+        if (frameCount % 120 == 0) printf("height %d width %d", screenHeight, screenWidth);
+
         frameCount++;
         Vector2 mousePos = GetMousePosition();
 
