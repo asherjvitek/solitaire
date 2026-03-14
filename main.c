@@ -23,6 +23,11 @@ enum Suit {
     DIAMOND
 };
 
+enum WasteType {
+    ONE,
+    THREE
+};
+
 typedef struct {
     int id;
     enum Suit suit;
@@ -105,6 +110,7 @@ Card cards[52] = {
     new_card(51, CLUB, KING, "club_king.png"),
 };
 
+// globals
 Pile stock = {0};
 Pile waste = {0};
 Pile foundation[4] = {0};
@@ -114,6 +120,14 @@ Pile *grabbedSource = NULL;
 CardSplosion cardSplosion = {0};
 bool mouseDown = false;
 bool won = false;
+enum WasteType wasteType = ONE;
+int cardSplosionIndex = 51;
+int bounceIter = 0;
+int wasteShown = 0;
+Vector2 cardMoveDefault = { 5, 0 };
+int direction = -1;
+int reduction = 0;
+int currentY = 0;
 
 Vector2 stockPos = { SPACING, HEADER_HEIGHT + SPACING };
 Vector2 wastePos = { CARD_WIDTH + HEADER_HEIGHT + SPACING * 2, SPACING };
@@ -133,24 +147,6 @@ Vector2 foundationPos[4] = {
     { CARD_WIDTH_SPACING * 5 + SPACING, HEADER_HEIGHT + SPACING },
     { CARD_WIDTH_SPACING * 6 + SPACING, HEADER_HEIGHT + SPACING },
 };
-
-
-void printCard(Card *card, char* message, int frameCount) {
-    if (!DEBUG) return;
-
-    if (frameCount % 120 == 0) {
-        printf("%s suit: %d, number: %d, pos: %f, %f, pointer: %p\n", message, card->suit, card->number, card->pos.x, card->pos.y, card);
-    }
-}
-
-void printCards() {
-    printf("----------------- Cards -----------------\n");
-    for (int i = 0; i < 52; i++) {
-        Card *card = &cards[i];
-        printCard(card, "", 0);
-    }
-    printf("----------------- Cards -----------------\n");
-}
 
 void loadCards() {
     for (int i = 0; i < 52; i++) {
@@ -524,28 +520,40 @@ void handlePlacingCard(Vector2 mousePos) {
 
 void handleDrawFromStock(Vector2 mousePos) {
     if (stock.count == 0 && waste.count == 0) return;
+    if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) return;
 
     Rectangle drawRect = getCardRectangle(stockPos);
-    if (CheckCollisionPointRec(mousePos, drawRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
 
-        if (stock.count == 0) {
-            while (waste.count > 0) {
-                Card *card = waste.items[0];                    
-                card->pos.x = stockPos.x;
-                card->pos.y = stockPos.y;
-                card->visible = false;
-                da_remove_ordered(&waste, 0);
-                da_append(&stock, card);
-            }
-        }
+    if (!CheckCollisionPointRec(mousePos, drawRect)) return;
 
-        Card *card = stock.items[0];
-        card->pos.x = wastePos.x;
-        card->pos.y = wastePos.y;
-        card->visible = true;
-        da_remove_ordered(&stock, 0);
-        da_append(&waste, card);
+    switch (wasteType) {
+        case ONE: 
+            wasteShown = 1;
+            break;
+        case THREE: 
+            wasteShown = 3;
+            break;
+        default:
+            assert("invalid wastetype");
     }
+
+    if (stock.count == 0) {
+        while (waste.count > 0) {
+            Card *card = waste.items[0];                    
+            card->pos.x = stockPos.x;
+            card->pos.y = stockPos.y;
+            card->visible = false;
+            da_remove_ordered(&waste, 0);
+            da_append(&stock, card);
+        }
+    }
+
+    Card *card = stock.items[0];
+    card->pos.x = wastePos.x;
+    card->pos.y = wastePos.y;
+    card->visible = true;
+    da_remove_ordered(&stock, 0);
+    da_append(&waste, card);
 }
 
 void drawGame() {
@@ -626,10 +634,6 @@ void drawGame() {
     }
 
     if (won) {
-        // fontSize = 40;
-        // text = "You WIN!"; 
-        // size = MeasureTextEx(font, text, fontSize, 1.0);
-        // DrawText(text, WINDOW_WIDTH / 2 - size.x / 2, WINDOW_HEIGHT / 2 - size.y / 2, 20, BLACK);
         da_foreach(Card, card, &cardSplosion) {
             DrawTextureV(card->texture, card->pos, RAYWHITE);
         }
@@ -674,22 +678,84 @@ void setGameToWonState() {
     }
 }
 
+void handleGameWon() {
+    if (cardSplosionIndex < 0) {
+        drawGame();
+        
+        return;
+    }
+
+    bool firstTime = cardSplosion.count == 0;
+
+    Card card = {0};
+    if (cardSplosion.count == 0) {
+        card = cards[cardSplosionIndex];
+    } else {
+        card = da_last(&cardSplosion);
+    }
+
+    if (card.pos.y + CARD_HEIGHT < 0 || card.pos.x + CARD_WIDTH <= 0 || card.pos.x >= WINDOW_WIDTH || card.pos.y + CARD_HEIGHT >= WINDOW_HEIGHT || firstTime) {
+        if (!firstTime) cardSplosionIndex--;
+
+        srand(time(NULL));
+        cardMoveDefault.x = (rand() % 20) - 10;
+
+        srand(time(NULL));
+        cardMoveDefault.y = (rand() % 20) + 20;
+        currentY = cardMoveDefault.y;
+
+        if (cardSplosionIndex > 0) {
+            card = cards[cardSplosionIndex];
+            bounceIter = 0;
+            direction = -1;
+        } 
+    }
+
+    if (bounceIter == 0) {
+        cardMoveDefault.y = currentY;
+        if (direction == 1) {
+            reduction = cardMoveDefault.y / 5;
+            bounceIter = 5;
+            direction = -1;
+        } else {
+            reduction = cardMoveDefault.y / 20;
+            cardMoveDefault.y = 0;
+            bounceIter = 20;
+            direction = 1;
+        }
+    }
+
+
+    bounceIter--;
+    if (direction == 1) {
+        cardMoveDefault.y += reduction;
+    } else {
+        cardMoveDefault.y -= reduction;
+    }
+
+
+    card.pos.x += cardMoveDefault.x;
+    card.pos.y += (cardMoveDefault.y * direction);
+
+    da_append(&cardSplosion, card);
+
+    drawGame();
+}
+
+void changeWasteType() {
+
+}
+
 int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Solitaire");
     SetTraceLogLevel(LOG_ERROR); 
-    SetTargetFPS(200);
+    SetTargetFPS(60);
 
     loadCards();
     gameBoardInit();
 
     int frameCount = 0;
-    int cardSplosionIndex = 51;
-    Vector2 cardMoveDefault = { 5, 5 };
-    int bounceIter = 10;
-    int direction = 1;
-    int reduction = 1;
-    int currentY = 0;
 
     while(!WindowShouldClose()) {
         frameCount++;
@@ -698,81 +764,34 @@ int main(void) {
         if (IsKeyPressed(KEY_R)) {
             gameBoardInit();
             cardSplosionIndex = 51;
+            cardSplosionIndex = 51;
+            bounceIter = 0;
+            wasteShown = 0;
+            cardMoveDefault.x = 5;
+            cardMoveDefault.y = 5;
+            direction = -1;
+            reduction = 0;
+            currentY = 0;
+            won = false;
+        }
+
+
+        if (IsKeyPressed(KEY_T)) {
+            changeWasteType();
+            cardSplosionIndex = 51;
             won = false;
         }
 
         if (won) {
-
-            if (cardSplosionIndex < 0) {
-                drawGame();
-                
-                continue;
-            }
-
-            Card card = {0};
-            if (cardSplosion.count == 0) {
-                card = cards[cardSplosionIndex];
-            } else {
-                card = da_last(&cardSplosion);
-            }
-
-            if (bounceIter == 0) {
-                cardMoveDefault.y = currentY;
-                if (direction == 1) {
-                    reduction = cardMoveDefault.y / 5;
-                    bounceIter = 5;
-                    direction = -1;
-                } else {
-                    reduction = cardMoveDefault.y / 10;
-                    cardMoveDefault.y = 0;
-                    bounceIter = 10;
-                    direction = 1;
-                }
-            }
-
-            bounceIter--;
-            if (direction == 1) {
-                cardMoveDefault.y += reduction;
-            } else {
-                cardMoveDefault.y -= reduction;
-            }
-
-            if (card.pos.y + CARD_HEIGHT < 0 || card.pos.x + CARD_WIDTH <= 0 || card.pos.x >= WINDOW_WIDTH || card.pos.y + CARD_HEIGHT >= WINDOW_HEIGHT) {
-                cardSplosionIndex--;
-
-                srand(time(NULL));
-                cardMoveDefault.x = (rand() % 20) - 10;
-
-                // if (cardMoveDefault.x >= 0 && cardMoveDefault.x < 2) {
-                //     cardMoveDefault.x = 2;
-                // }
-                //
-                // if (cardMoveDefault.x > -2 && cardMoveDefault.x < 0) {
-                //     cardMoveDefault.x = -2;
-                // }
-
-                srand(time(NULL));
-                cardMoveDefault.y = (rand() % 20) + 10;
-                currentY = cardMoveDefault.y;
-
-                if (cardSplosionIndex > 0) {
-                    card = cards[cardSplosionIndex];
-                } 
-            }
-
-            card.pos.x += cardMoveDefault.x;
-            card.pos.y += (cardMoveDefault.y * direction);
-
-            da_append(&cardSplosion, card);
-
-            drawGame();
-            
+            handleGameWon();
             continue;
         }
 
         won = checkIfGameWon();
 
         if (!won && IsKeyPressed(KEY_W) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) {
+            printf("direction %d, reduction %d", direction, reduction);
+
             setGameToWonState();
         }
 
